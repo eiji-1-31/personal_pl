@@ -1,0 +1,678 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>個人損益計算書（PL）ジェネレーター</title>
+  <style>
+    :root {
+      --bg: #0b0f14;
+      --panel: #111827;
+      --panel-2: #0f172a;
+      --text: #e5e7eb;
+      --muted: #9ca3af;
+      --accent: #60a5fa;
+      --green: #22c55e;
+      --red: #ef4444;
+      --yellow: #f59e0b;
+      --border: #1f2937;
+    }
+    * { box-sizing: border-box; }
+    html, body { height: 100%; }
+    body {
+      margin: 0; font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Noto Sans JP", "Hiragino Kaku Gothic ProN", "Yu Gothic UI", Meiryo, sans-serif;
+      background: linear-gradient(120deg, #0a0f1a, #0b1220 60%, #0a0f1a);
+      color: var(--text);
+    }
+    header { position: sticky; top: 0; z-index: 50; background: rgba(11,15,20,.6); backdrop-filter: blur(10px); border-bottom: 1px solid var(--border); }
+    .container { max-width: 1100px; margin: 0 auto; padding: 18px 16px; }
+    .title { font-weight: 800; letter-spacing: .02em; font-size: clamp(20px, 3vw, 28px); display: flex; align-items: center; gap: 10px; }
+    .badge { font-size: 12px; color: var(--muted); border: 1px solid var(--border); padding: 2px 8px; border-radius: 999px; }
+
+    .grid { display: grid; grid-template-columns: 1fr; gap: 16px; }
+    @media (min-width: 960px) { .grid { grid-template-columns: 1.2fr .8fr; } }
+
+    .card { background: radial-gradient(1200px 400px at -10% -10%, #162036 0%, transparent 40%) , var(--panel); border: 1px solid var(--border); border-radius: 16px; padding: 16px; box-shadow: 0 10px 30px rgba(0,0,0,.25); }
+    .card h2 { margin: 0 0 8px; font-size: 18px; letter-spacing: .02em; }
+    .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+    .row > * { margin: 4px 0; }
+
+    .toolbar { display:flex; flex-wrap: wrap; gap: 8px; }
+    button, .btn {
+      appearance: none; border: 1px solid var(--border); background: linear-gradient(180deg, #182235, #121a2b); color: var(--text);
+      padding: 10px 12px; border-radius: 10px; cursor: pointer; font-weight: 600; letter-spacing: .02em;
+    }
+    button:hover { filter: brightness(1.05); }
+    .btn-ghost { background: transparent; }
+    .btn-accent { background: linear-gradient(180deg, #1d4ed8, #1e3a8a); border-color: #1d4ed8; }
+    .btn-green { background: linear-gradient(180deg, #16a34a, #065f46); border-color: #16a34a; }
+    .btn-red { background: linear-gradient(180deg, #b91c1c, #7f1d1d); border-color: #b91c1c; }
+
+    select, input[type="number"], input[type="text"], input[type="month"] {
+      background: #0b1220; color: var(--text); border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; outline: none; min-width: 0;
+    }
+    input[type="number"] { width: 130px; text-align: right; }
+    input[type="text"] { width: 180px; }
+
+    table { width: 100%; border-collapse: collapse; }
+    th, td { border-bottom: 1px dashed var(--border); padding: 10px 6px; }
+    th { text-align: left; color: var(--muted); font-weight: 600; }
+    tbody tr:hover { background: rgba(96,165,250,0.06); }
+
+    .section-head { display:flex; align-items:center; justify-content:space-between; margin-bottom: 8px; }
+    .section-head h3 { margin:0; font-size: 16px; letter-spacing: .02em; }
+
+    .summary { display:grid; grid-template-columns: repeat(2,1fr); gap: 10px; }
+    @media (min-width: 540px) { .summary { grid-template-columns: repeat(4,1fr); } }
+    .pill {
+      padding: 14px; background: linear-gradient(180deg, #0f172a, #0b1220); border: 1px solid var(--border); border-radius: 12px;
+      display:flex; flex-direction: column; gap: 6px; min-height: 86px;
+    }
+    .pill .label { color: var(--muted); font-size: 12px; letter-spacing: .04em; text-transform: uppercase; }
+    .pill .value { font-size: 20px; font-weight: 800; }
+    .pill.positive .value { color: var(--green); }
+    .pill.negative .value { color: var(--red); }
+    .delta { font-size: 12px; color: var(--muted); display:flex; gap:8px; flex-wrap: wrap; }
+    .delta strong { font-weight:700; }
+    .delta .up { color: var(--green); }
+    .delta .down { color: var(--red); }
+
+    .hint { color: var(--muted); font-size: 12px; }
+
+    canvas { width: 100%; height: 280px; background: #0b1220; border: 1px solid var(--border); border-radius: 12px; }
+
+    .scroll-row {
+      display: grid;
+      grid-auto-flow: column;
+      grid-auto-columns: minmax(240px, 1fr);
+      gap: 12px;
+      overflow-x: auto;
+      padding-bottom: 6px;
+      scroll-snap-type: x mandatory;
+    }
+    .history-card {
+      scroll-snap-align: start;
+      background: linear-gradient(180deg, #0f172a, #0b1220);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 12px;
+      min-height: 120px;
+      display:flex; flex-direction: column; gap:6px;
+      cursor: pointer;
+    }
+    .history-card:hover { filter: brightness(1.05); }
+    .history-title { font-weight: 700; }
+    .history-metrics { font-size: 12px; color: var(--muted); display:grid; gap:2px; }
+
+    footer { color: var(--muted); font-size: 12px; text-align: center; padding: 24px; }
+
+    @media print {
+      header, .toolbar, .hint, .btn, .btn-ghost, .btn-accent, .btn-green, .btn-red, .scroll-row { display:none !important; }
+      body { background: #fff; color:#000; }
+      .card { box-shadow: none; border: 1px solid #ccc; }
+      .pill { border-color: #ccc; }
+      canvas { display:none; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="container row" style="justify-content: space-between;">
+      <div class="title">個人損益計算書（PL）<span class="badge">月/年 自動換算・保存・CSV・履歴</span></div>
+      <div class="row">
+        <label class="row" style="gap:6px; align-items:center;">
+          <span class="hint">対象月</span>
+          <input id="targetMonth" type="month">
+        </label>
+        <label class="row" style="gap:6px; align-items:center;">
+          <span class="hint">表示</span>
+          <select id="viewMode">
+            <option value="monthly">月次</option>
+            <option value="yearly">年次</option>
+          </select>
+        </label>
+        <button id="printBtn" class="btn-ghost">印刷 / PDF</button>
+      </div>
+    </div>
+  </header>
+
+  <main class="container grid">
+    <section class="card">
+      <div class="section-head">
+        <h2>入力（収入 / 支出 / 期首資本）</h2>
+        <div class="toolbar">
+          <button id="addIncome" class="btn-accent">＋ 収入を追加</button>
+          <button id="addExpense" class="btn-ghost">＋ 支出を追加</button>
+          <button id="resetAll" class="btn-red">初期化</button>
+        </div>
+      </div>
+
+      <div class="row" style="gap:12px; margin-bottom:8px;">
+        <label class="row" style="gap:6px;">
+          <span class="hint">期首資本（現金・預金など）</span>
+          <input type="number" id="openingCapital" min="0" step="1000" placeholder="¥" />
+        </label>
+        <span class="hint">※月末残高＝期首資本＋総収入−総支出</span>
+      </div>
+
+      <div class="section">
+        <div class="section-head"><h3>収入</h3><span class="hint">※金額は <strong>月額</strong> で入力してください（年表示は自動換算）</span></div>
+        <table id="incomeTable">
+          <thead>
+            <tr><th style="width:36%">項目</th><th style="width:20%">金額（円/月）</th><th style="width:30%">メモ</th><th style="width:14%"></th></tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+
+      <div class="section" style="margin-top:16px;">
+        <div class="section-head"><h3>支出</h3></div>
+        <table id="expenseTable">
+          <thead>
+            <tr><th style="width:36%">項目</th><th style="width:20%">金額（円/月）</th><th style="width:30%">メモ</th><th style="width:14%"></th></tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+
+      <div class="row" style="margin-top:12px; gap: 10px;">
+        <input type="text" id="profileName" placeholder="プロフィール名（例：一人暮らし_学生）" />
+        <button id="saveBtn" class="btn-green">保存</button>
+        <button id="loadBtn" class="btn-ghost">読込</button>
+        <button id="exportBtn" class="btn-ghost">CSV 書き出し</button>
+        <label class="btn" style="position:relative; overflow:hidden;" title="CSV から読み込み">
+          CSV 読み込み
+          <input id="importCsv" type="file" accept=".csv" style="position:absolute; inset:0; opacity:0; cursor:pointer;" />
+        </label>
+      </div>
+      <div class="hint">ヒント：入力は自動保存（ローカル）＆対象月の履歴に自動追加されます。複数パターンは「プロフィール名」を付けて保存してください。</div>
+    </section>
+
+    <aside class="card">
+      <h2>サマリー（<span id="summaryMonthText">-</span>）</h2>
+      <div class="summary" style="margin: 8px 0 14px;">
+        <div class="pill" id="incomePill">
+          <div class="label">総収入</div>
+          <div class="value" id="totalIncome">¥0</div>
+          <div class="delta" id="incomeDelta"></div>
+          <div class="hint" id="incomeHint">月次</div>
+        </div>
+        <div class="pill" id="expensePill">
+          <div class="label">総支出</div>
+          <div class="value" id="totalExpense">¥0</div>
+          <div class="delta" id="expenseDelta"></div>
+          <div class="hint" id="expenseHint">月次</div>
+        </div>
+        <div class="pill" id="profitPill">
+          <div class="label">純利益（黒字/赤字）</div>
+          <div class="value" id="netProfit">¥0</div>
+          <div class="delta" id="profitDelta"></div>
+          <div class="hint" id="profitHint">月次</div>
+        </div>
+        <div class="pill" id="closingPill">
+          <div class="label">月末残高</div>
+          <div class="value" id="closingBalance">¥0</div>
+          <div class="delta" id="closingDelta"></div>
+          <div class="hint">期首＋収入−支出</div>
+        </div>
+      </div>
+
+      <canvas id="chart"></canvas>
+      <div class="hint" style="margin-top:8px;">円グラフ：支出の内訳（表示モードに応じて金額自動換算）</div>
+    </aside>
+  </main>
+
+  <!-- 履歴 -->
+  <section class="container card" style="margin-top: 8px;">
+    <div class="section-head">
+      <h2>月ごとの履歴</h2>
+      <div class="hint">左右にスクロールできます。カードをクリックで読み込み。</div>
+    </div>
+    <div id="historyRow" class="scroll-row"></div>
+  </section>
+
+  <footer>© 個人PLジェネレーター — ローカルで動作。データはご自身のブラウザ内に保存されます。</footer>
+
+  <script>
+    // ---- 初期カテゴリ
+    const DEFAULT_INCOME = ['給与', 'アルバイト', '事業収入', '投資収入', 'その他収入'];
+    const DEFAULT_EXPENSE = ['家賃', '食費', '水道光熱費', '通信費', '交通費', '教育/自己投資', '医療/保険', '交際費', '娯楽', '日用品', 'サブスク', 'その他'];
+
+    const incomeTBody = document.querySelector('#incomeTable tbody');
+    const expenseTBody = document.querySelector('#expenseTable tbody');
+    const viewMode = document.getElementById('viewMode');
+    const targetMonth = document.getElementById('targetMonth');
+
+    const openingCapitalEl = document.getElementById('openingCapital');
+
+    const totalIncomeEl = document.getElementById('totalIncome');
+    const totalExpenseEl = document.getElementById('totalExpense');
+    const netProfitEl = document.getElementById('netProfit');
+    const closingBalanceEl = document.getElementById('closingBalance');
+
+    const profitPill = document.getElementById('profitPill');
+    const incomeHint = document.getElementById('incomeHint');
+    const expenseHint = document.getElementById('expenseHint');
+    const profitHint = document.getElementById('profitHint');
+    const summaryMonthText = document.getElementById('summaryMonthText');
+
+    const incomeDelta = document.getElementById('incomeDelta');
+    const expenseDelta = document.getElementById('expenseDelta');
+    const profitDelta = document.getElementById('profitDelta');
+    const closingDelta = document.getElementById('closingDelta');
+
+    const historyRow = document.getElementById('historyRow');
+
+    const fmt = new Intl.NumberFormat('ja-JP');
+
+    // ---- 行の生成
+    function escAttr(s){ return String(s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;'); }
+    function createRow(name = '', amount = 0, memo = '') {
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td><input type="text" class="name" value="${escAttr(name)}"></td>
+        <td><input type="number" class="amount" inputmode="numeric" min="0" step="1000" value="${amount}"></td>
+        <td><input type="text" class="memo" value="${escAttr(memo)}" placeholder="（任意）具体的な内訳など"></td>
+        <td style="text-align:right;">
+          <button class="btn-ghost delRow" title="削除">削除</button>
+        </td>`;
+      tr.querySelector('.amount').addEventListener('input', handleChange);
+      tr.querySelector('.name').addEventListener('input', handleChange);
+      tr.querySelector('.delRow').addEventListener('click', () => { tr.remove(); handleChange(); });
+      tr.querySelector('.memo').addEventListener('input', saveAutoOnly);
+      return tr;
+    }
+
+    function seedDefaults() {
+      if (!localStorage.getItem('pl_seeded_v2')) {
+        DEFAULT_INCOME.forEach(n => incomeTBody.appendChild(createRow(n, 0)));
+        DEFAULT_EXPENSE.forEach(n => expenseTBody.appendChild(createRow(n, 0)));
+        localStorage.setItem('pl_seeded_v2', '1');
+        saveAuto();
+      } else {
+        loadAuto();
+      }
+      if (!targetMonth.value) {
+        const today = new Date();
+        const ym = today.toISOString().slice(0,7);
+        targetMonth.value = ym;
+      }
+      recalc();
+      renderHistory();
+    }
+
+    // ---- 計算
+    function getRows(tbody) {
+      return [...tbody.querySelectorAll('tr')].map(tr => ({
+        name: tr.querySelector('.name').value.trim() || '（未入力）',
+        amountMonthly: Number(tr.querySelector('.amount').value || 0),
+        memo: tr.querySelector('.memo').value || ''
+      }));
+    }
+
+    function monthlyToView(v) { return viewMode.value === 'yearly' ? v * 12 : v; }
+
+    function calcTotals(){
+      const incomes = getRows(incomeTBody);
+      const expenses = getRows(expenseTBody);
+      const sumIncomeM = incomes.reduce((a, r) => a + (r.amountMonthly||0), 0);
+      const sumExpenseM = expenses.reduce((a, r) => a + (r.amountMonthly||0), 0);
+      const netM = sumIncomeM - sumExpenseM;
+      const opening = Number(openingCapitalEl.value || 0);
+      const closing = opening + netM;
+      return { incomes, expenses, sumIncomeM, sumExpenseM, netM, opening, closing };
+    }
+
+    function recalc() {
+      const { incomes, expenses, sumIncomeM, sumExpenseM, netM, opening, closing } = calcTotals();
+
+      totalIncomeEl.textContent = '¥' + fmt.format(monthlyToView(sumIncomeM));
+      totalExpenseEl.textContent = '¥' + fmt.format(monthlyToView(sumExpenseM));
+      netProfitEl.textContent   = '¥' + fmt.format(monthlyToView(netM));
+      closingBalanceEl.textContent = '¥' + fmt.format(monthlyToView(closing));
+
+      profitPill.classList.remove('positive', 'negative');
+      if (netM >= 0) profitPill.classList.add('positive'); else profitPill.classList.add('negative');
+
+      const label = viewMode.value === 'yearly' ? '年次' : '月次';
+      incomeHint.textContent = label; expenseHint.textContent = label; profitHint.textContent = label;
+
+      summaryMonthText.textContent = targetMonth.value || '-';
+
+      // グラフ
+      drawChart(expenses);
+
+      // 履歴に現在月を自動保存
+      saveHistoryCurrentMonth();
+
+      // 前月比・前年同月比
+      renderDeltas({ sumIncomeM, sumExpenseM, netM, opening, closing });
+
+      // 履歴カード再描画（最新反映）
+      renderHistory();
+    }
+
+    // ---- グラフ（支出内訳）
+    const chartCanvas = document.getElementById('chart');
+    const ctx = chartCanvas.getContext('2d');
+    function drawChart(expenses) {
+      const W = chartCanvas.clientWidth, H = chartCanvas.clientHeight;
+      chartCanvas.width = W * devicePixelRatio; chartCanvas.height = H * devicePixelRatio;
+      ctx.setTransform(1,0,0,1,0,0);
+      ctx.scale(devicePixelRatio, devicePixelRatio);
+      ctx.clearRect(0,0,W,H);
+
+      const centerX = W/2, centerY = H/2, radius = Math.min(W,H)/2 - 16;
+      const innerR = radius * 0.55;
+
+      const totalM = expenses.reduce((a,r)=>a+(r.amountMonthly||0),0);
+      if (totalM <= 0) {
+        ctx.fillStyle = '#9ca3af';
+        ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.font = '14px system-ui, sans-serif';
+        ctx.fillText('支出を入力すると内訳が表示されます', centerX, centerY);
+        return;
+      }
+
+      const n = expenses.length;
+      let startAngle = -Math.PI/2;
+      expenses.forEach((r, i) => {
+        const val = r.amountMonthly||0; if (!val) return;
+        const ratio = val / totalM;
+        const endAngle = startAngle + ratio * Math.PI * 2;
+        const hue = (i * 360 / n) % 360;
+        ctx.beginPath();
+        ctx.moveTo(centerX, centerY);
+        ctx.arc(centerX, centerY, radius, startAngle, endAngle);
+        ctx.closePath();
+        ctx.fillStyle = `hsl(${hue} 70% 55% / 0.95)`;
+        ctx.fill();
+        startAngle = endAngle;
+      });
+      // ドーナツ穴
+      ctx.globalCompositeOperation = 'destination-out';
+      ctx.beginPath(); ctx.arc(centerX, centerY, innerR, 0, Math.PI*2); ctx.fill();
+      ctx.globalCompositeOperation = 'source-over';
+
+      // 凡例
+      const legendX = 12, legendY = 12, lineH = 22;
+      let j = 0;
+      expenses.forEach((r, i) => {
+        const val = r.amountMonthly||0; if (!val) return;
+        const hue = (i * 360 / n) % 360;
+        const y = legendY + j*lineH;
+        ctx.fillStyle = `hsl(${hue} 70% 55%)`;
+        ctx.fillRect(legendX, y+4, 12, 12);
+        ctx.fillStyle = '#e5e7eb';
+        ctx.font = '12px system-ui, sans-serif';
+        const label = `${r.name}：¥${fmt.format(monthlyToView(val))}`;
+        ctx.fillText(label, legendX + 18, y + 12);
+        j++;
+      });
+    }
+
+    // ---- シリアライズ
+    function serialize() {
+      return {
+        month: targetMonth.value || '',
+        openingCapital: Number(openingCapitalEl.value || 0),
+        incomes: getRows(incomeTBody),
+        expenses: getRows(expenseTBody)
+      };
+    }
+    function deserialize(data) {
+      openingCapitalEl.value = Number(data.openingCapital || 0);
+      incomeTBody.innerHTML = ''; expenseTBody.innerHTML = '';
+      (data.incomes||[]).forEach(r => incomeTBody.appendChild(createRow(r.name, r.amountMonthly||0, r.memo||'')));
+      (data.expenses||[]).forEach(r => expenseTBody.appendChild(createRow(r.name, r.amountMonthly||0, r.memo||'')));
+      recalc();
+    }
+
+    function saveAuto() {
+      localStorage.setItem('pl_auto_v2', JSON.stringify(serialize()));
+    }
+    function saveAutoOnly() {
+      localStorage.setItem('pl_auto_v2', JSON.stringify(serialize()));
+    }
+    function loadAuto() {
+      const raw = localStorage.getItem('pl_auto_v2');
+      if (raw) {
+        try { const data = JSON.parse(raw); if (data.month) targetMonth.value = data.month; deserialize(data); }
+        catch(e) { console.warn(e); }
+      } else {
+        DEFAULT_INCOME.forEach(n => incomeTBody.appendChild(createRow(n, 0)));
+        DEFAULT_EXPENSE.forEach(n => expenseTBody.appendChild(createRow(n, 0)));
+      }
+    }
+
+    document.addEventListener('input', (e) => {
+      if (e.target.matches('.amount, .name, .memo, #openingCapital')) handleChange();
+    });
+
+    function handleChange(){
+      saveAuto();
+      recalc();
+    }
+
+    // プロフィール保存/読込
+    const saveBtn = document.getElementById('saveBtn');
+    const loadBtn = document.getElementById('loadBtn');
+    const profileName = document.getElementById('profileName');
+
+    saveBtn.addEventListener('click', () => {
+      const key = profileName.value.trim();
+      if (!key) return alert('プロフィール名を入力してください');
+      localStorage.setItem('pl_profile_' + key, JSON.stringify(serialize()));
+      alert('保存しました：' + key);
+    });
+    loadBtn.addEventListener('click', () => {
+      const key = prompt('読み込むプロフィール名を入力（保存済みの名前）');
+      if (!key) return;
+      const raw = localStorage.getItem('pl_profile_' + key);
+      if (!raw) return alert('見つかりません：' + key);
+      try {
+        const data = JSON.parse(raw);
+        if (data.month) targetMonth.value = data.month;
+        deserialize(data);
+        profileName.value = key;
+        saveAuto();
+      } catch(e){ alert('読込に失敗しました'); }
+    });
+
+    // 追加・初期化
+    document.getElementById('addIncome').addEventListener('click', () => { incomeTBody.appendChild(createRow('新しい収入', 0)); handleChange(); });
+    document.getElementById('addExpense').addEventListener('click', () => { expenseTBody.appendChild(createRow('新しい支出', 0)); handleChange(); });
+    document.getElementById('resetAll').addEventListener('click', () => {
+      if (!confirm('すべて初期化します。よろしいですか？（履歴は保持）')) return;
+      localStorage.removeItem('pl_auto_v2'); localStorage.removeItem('pl_seeded_v2');
+      incomeTBody.innerHTML=''; expenseTBody.innerHTML='';
+      openingCapitalEl.value = '';
+      seedDefaults();
+    });
+
+    // CSV 書き出し/読み込み（従来互換：openingCapitalも含める）
+    function toCSV(data) {
+      const esc = (s) => '"' + String(s).replace(/"/g,'""') + '"';
+      const rows = [['type','name','amountMonthly','memo','openingCapital','month']];
+      data.incomes.forEach(r => rows.push(['income', r.name, r.amountMonthly, r.memo, data.openingCapital, data.month]));
+      data.expenses.forEach(r => rows.push(['expense', r.name, r.amountMonthly, r.memo, data.openingCapital, data.month]));
+      return rows.map(r => r.map(esc).join(',')).join('\n');
+    }
+    function fromCSV(text) {
+      const rows = [];
+      let i = 0, field = '', inQ = false, row = [];
+      while (i < text.length) {
+        const ch = text[i++];
+        if (inQ) {
+          if (ch === '"') {
+            if (text[i] === '"') { field += '"'; i++; } else { inQ = false; }
+          } else { field += ch; }
+        } else {
+          if (ch === '"') { inQ = true; }
+          else if (ch === ',') { row.push(field); field = ''; }
+          else if (ch === '\n' || ch === '\r') { if (field!=='' || row.length) { row.push(field); rows.push(row); row=[]; field=''; } }
+          else { field += ch; }
+        }
+      }
+      if (field!=='' || row.length) { row.push(field); rows.push(row); }
+
+      const header = rows.shift();
+      const idx = Object.fromEntries(header.map((h, j) => [h, j]));
+      const incomes = [], expenses = [];
+      let openingCapital = 0, month = '';
+      for (const r of rows) {
+        const type = r[idx.type];
+        if (type === 'income' || type === 'expense') {
+          const rec = { name: r[idx.name], amountMonthly: Number(r[idx.amountMonthly] || 0), memo: r[idx.memo] || '' };
+          if (type === 'income') incomes.push(rec); else expenses.push(rec);
+        }
+        openingCapital = Number(r[idx.openingCapital] || openingCapital || 0);
+        month = r[idx.month] || month || '';
+      }
+      return { month, openingCapital, incomes, expenses };
+    }
+
+    document.getElementById('exportBtn').addEventListener('click', () => {
+      const csv = toCSV(serialize());
+      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = 'personal_pl.csv'; a.click();
+      URL.revokeObjectURL(url);
+    });
+
+    document.getElementById('importCsv').addEventListener('change', (e) => {
+      const file = e.target.files[0]; if (!file) return;
+      const reader = new FileReader();
+      reader.onload = () => {
+        try {
+          const data = fromCSV(String(reader.result));
+          if (data.month) targetMonth.value = data.month;
+          deserialize(data);
+          saveAuto();
+          alert('CSV を読み込みました');
+        } catch (err) { alert('CSV の読み込みに失敗しました'); }
+      };
+      reader.readAsText(file, 'utf-8');
+      e.target.value = '';
+    });
+
+    // 印刷
+    document.getElementById('printBtn').addEventListener('click', () => window.print());
+
+    // 表示モード変更 & 対象月変更
+    viewMode.addEventListener('change', recalc);
+    targetMonth.addEventListener('change', () => {
+      saveAuto();
+      // 月が変わったら、その月の履歴があれば読み込み、なければ現状をその月として保存
+      const hist = getHistory();
+      const key = targetMonth.value;
+      if (hist[key]) {
+        deserialize(hist[key].data);
+      } else {
+        // 新規月として現在の表をそのまま保存
+        saveHistoryCurrentMonth();
+        recalc();
+      }
+    });
+
+    // ---- 履歴（自動）
+    function getHistory(){
+      try { return JSON.parse(localStorage.getItem('pl_history_v2') || '{}'); }
+      catch { return {}; }
+    }
+    function setHistory(obj){
+      localStorage.setItem('pl_history_v2', JSON.stringify(obj));
+    }
+    function saveHistoryCurrentMonth(){
+      const key = targetMonth.value;
+      if (!key) return;
+      const hist = getHistory();
+      hist[key] = { data: serialize(), savedAt: Date.now() };
+      setHistory(hist);
+    }
+    function renderHistory(){
+      const hist = getHistory();
+      const keys = Object.keys(hist).sort(); // YYYY-MM の昇順
+      historyRow.innerHTML = '';
+      keys.forEach(k => {
+        const entry = hist[k].data;
+        const { sumIncomeM, sumExpenseM, netM, opening, closing } = summarize(entry);
+        const card = document.createElement('div');
+        card.className = 'history-card';
+        card.title = 'クリックで読み込み';
+        card.innerHTML = `
+          <div class="history-title">${k}</div>
+          <div class="history-metrics">
+            <div>収入：¥${fmt.format(sumIncomeM)}</div>
+            <div>支出：¥${fmt.format(sumExpenseM)}</div>
+            <div>純利益：¥${fmt.format(netM)}</div>
+            <div>月末残高：¥${fmt.format(closing)}</div>
+          </div>
+        `;
+        card.addEventListener('click', () => {
+          targetMonth.value = k;
+          deserialize(entry);
+          saveAuto();
+        });
+        historyRow.appendChild(card);
+      });
+    }
+    function summarize(data){
+      const sumIncomeM = (data.incomes||[]).reduce((a,r)=>a+(Number(r.amountMonthly)||0),0);
+      const sumExpenseM = (data.expenses||[]).reduce((a,r)=>a+(Number(r.amountMonthly)||0),0);
+      const netM = sumIncomeM - sumExpenseM;
+      const opening = Number(data.openingCapital||0);
+      const closing = opening + netM;
+      return { sumIncomeM, sumExpenseM, netM, opening, closing };
+    }
+
+    // ---- 前月比・前年同月比
+    function renderDeltas(current){
+      const ym = targetMonth.value;
+      const hist = getHistory();
+
+      const prevYm = shiftMonth(ym, -1);
+      const yoyYm  = shiftMonth(ym, -12);
+
+      const prev = hist[prevYm]?.data ? summarize(hist[prevYm].data) : null;
+      const yoy  = hist[yoyYm]?.data ? summarize(hist[yoyYm].data) : null;
+
+      setDeltaText(incomeDelta,  current.sumIncomeM, prev?.sumIncomeM, yoy?.sumIncomeM);
+      setDeltaText(expenseDelta, current.sumExpenseM, prev?.sumExpenseM, yoy?.sumExpenseM, true /*expense: up is bad*/);
+      setDeltaText(profitDelta,  current.netM,       prev?.netM,       yoy?.netM);
+      setDeltaText(closingDelta, current.closing,    prev?.closing,    yoy?.closing);
+    }
+
+    function setDeltaText(el, cur, prev, yoy, invert=false){
+      const parts = [];
+      parts.push(formatDelta('前月比', cur, prev, invert));
+      parts.push(formatDelta('前年同月比', cur, yoy, invert));
+      el.innerHTML = parts.filter(Boolean).join('　');
+    }
+    function formatDelta(label, cur, base, invert=false){
+      if (base == null) return `<span>${label}：<span class="hint">-</span></span>`;
+      const diff = cur - base;
+      const up = diff >= 0;
+      const cls = up ? (invert ? 'down' : 'up') : (invert ? 'up' : 'down');
+      const pct = base === 0 ? '—' : ((diff / Math.abs(base)) * 100).toFixed(1) + '%';
+      const sign = up ? (invert ? '↓' : '↑') : (invert ? '↑' : '↓');
+      return `<span>${label}：<strong class="${cls}">${sign} ${fmt.format(diff)}（${pct}）</strong></span>`;
+    }
+    function shiftMonth(ym, delta){
+      if (!ym || !/^\d{4}-\d{2}$/.test(ym)) return '';
+      const [y,m] = ym.split('-').map(Number);
+      const d = new Date(y, m-1+delta, 1);
+      const yy = d.getFullYear();
+      const mm = String(d.getMonth()+1).padStart(2,'0');
+      return `${yy}-${mm}`;
+    }
+
+    // 初期化
+    seedDefaults();
+
+    // レスポンシブでキャンバス再描画
+    let resizeTimer; window.addEventListener('resize', () => { clearTimeout(resizeTimer); resizeTimer = setTimeout(recalc, 150); });
+  </script>
+</body>
+</html>
